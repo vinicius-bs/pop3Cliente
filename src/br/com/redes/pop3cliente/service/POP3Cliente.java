@@ -98,7 +98,7 @@ public class POP3Cliente{
 	}
 
 
-	protected Mensagem getMessageCompleta(int i) throws IOException {
+	public Mensagem getMessageCompleta(int i) throws IOException {
 
 		String response = sendCommand("RETR " + i).trim();
 		Map<String, List<String>> headers = new HashMap<String, List<String>>();
