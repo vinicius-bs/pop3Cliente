@@ -26,10 +26,12 @@ public class POP3Cliente{
 	private static final int DEFAULT_PORT = 110;
 
 	public void connect(String host) throws IOException {
+
 		socket = new Socket();
 		socket.connect(new InetSocketAddress(host, DEFAULT_PORT));
 		reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 		writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+
 		if (debug)
 			System.out.println("Connected to the host");
 
@@ -37,11 +39,14 @@ public class POP3Cliente{
 	}
 
 	public void disconnect() throws IOException {
+
 		if (!isConnected())
 			throw new IllegalStateException("Not connected to a host");
+
 		socket.close();
 		reader = null;
 		writer = null;
+
 		if (debug)
 			System.out.println("Disconnected from the host");
 	}
@@ -51,19 +56,25 @@ public class POP3Cliente{
 	}
 
 	protected String readResponseLine() throws IOException{
+
 		String response = reader.readLine();
+
 		if (debug) {
 			System.out.println("DEBUG [in] : " + response);
 		}
+
 		if (response.startsWith("-ERR"))
 			throw new RuntimeException("Server has returned an error: " + response.replaceFirst("-ERR ", ""));
+
 		return response;
 	}
 
 	protected String sendCommand(String command) throws IOException {
+
 		if (debug) {
 			System.out.println("DEBUG [out]: " + command);
 		}
+
 		writer.write(command + "\n");
 		writer.flush();
 		return readResponseLine();
@@ -79,49 +90,82 @@ public class POP3Cliente{
 	}
 
 	public int getNumberOfNewMessages() throws IOException {
+
 		String response = sendCommand("STAT");
 		String[] values = response.split(" ");
+
 		return Integer.parseInt(values[1]);
 	}
 
-	protected Mensagem getMessage(int i) throws IOException {
-		String response = sendCommand("RETR " + i);
+
+	protected Mensagem getMessageCompleta(int i) throws IOException {
+
+		String response = sendCommand("RETR " + i).trim();
 		Map<String, List<String>> headers = new HashMap<String, List<String>>();
 		String headerName = null;
-		// process headers
+
 		while ((response = readResponseLine()).length() != 0) {
+
 			if (response.startsWith("\t")) {
 				continue; //no process of multiline headers
 			}
+
 			int colonPosition = response.indexOf(":");
-			headerName = response.substring(0, colonPosition);
-			String headerValue;
-			if (headerName.length() > colonPosition) {
-				headerValue = response.substring(colonPosition + 2);
-			} else {
-				headerValue = "";
+
+			if(response.contains(":") && response.split(":").length > 1){
+				headerName = response.split(":")[0];
+
+				String headerValue;
+
+				if (headerName.length() > colonPosition) {
+					headerValue = response.substring(colonPosition + 2);
+				} 
+
+				else {
+					headerValue = "";
+				}
+
+				List<String> headerValues = headers.get(headerName);
+
+				if (headerValues == null) {
+					headerValues = new ArrayList<String>();
+					headers.put(headerName, headerValues);
+				}
+
+				headerValues.add(headerValue);
 			}
-			List<String> headerValues = headers.get(headerName);
-			if (headerValues == null) {
-				headerValues = new ArrayList<String>();
-				headers.put(headerName, headerValues);
-			}
-			headerValues.add(headerValue);
 		} 
-		// process body
+
 		StringBuilder bodyBuilder = new StringBuilder();
+
 		while (!(response = readResponseLine()).equals(".")) {
 			bodyBuilder.append(response + "\n");
 		}
+
 		return new Mensagem(headers, bodyBuilder.toString());
 	}
+	
+	public List<String> getListaEmails() throws IOException{
+		
+		String response = sendCommand("LIST").trim();
+		List<String> listaEmails = new ArrayList<String>();
+		
+		while (!(response = readResponseLine()).equals(".")) {
+			listaEmails.add(response);
+		}
+		
+		return listaEmails;
+	}
 
-	public List<Mensagem> getMessages() throws IOException {
+	public List<Mensagem> getMessagesHeaders() throws IOException {
+
 		int numOfMessages = getNumberOfNewMessages();
 		List<Mensagem> messageList = new ArrayList<Mensagem>();
+
 		for (int i = 1; i <= numOfMessages; i++) {
-			messageList.add(getMessage(i));
+			messageList.add(getMessageCompleta(i));
 		}
+
 		return messageList;
 	}
 
